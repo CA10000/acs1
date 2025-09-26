@@ -80,7 +80,18 @@
           </div>
         </div>
       </div>
-  
+         <!-- ✅ Word 一键转换（新增） -->
+       <section id="word-section" class="section">
+        <h3>📦 Word 一键转换</h3>
+        <div class="upload-area" id="word-area">
+          <div class="upload-icon">📝</div>
+          <h4>拖拽 Word 到此处或点击上传</h4>
+          <p>支持 .docx，自动转为你需要的 #题目1 格式</p>
+          <input type="file" id="word-input" accept=".docx" hidden>
+          <button class="btn btn-primary" onclick="document.getElementById('word-input').click()">选择 Word</button>
+        </div>
+        <div id="convert-log"></div>
+      </section>
       <!-- 加载 -->
       <div id="loading" class="loading hidden"><div class="spinner"></div><p>正在解析...</p></div>
     </div>
@@ -88,4 +99,5 @@
     <script src="script.js"></script>
     <script src="word2txt.js"></script>
 </body>
+
 </html>
