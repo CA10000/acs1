@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>解析回看</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Segoe UI,Helvetica,Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;color:#333}
+    .container{max-width:900px;margin:0 auto;padding:20px}
+    header{text-align:center;color:#fff;margin-bottom:30px}
+    .section{background:#fff;border-radius:12px;padding:25px;margin-bottom:20px;box-shadow:0 10px 30px rgba(0,0,0,.1)}
+    .review-card{margin-bottom:15px;padding:15px;border-left:5px solid #28a745;background:#f8f9fa;border-radius:8px}
+    .review-card.wrong{border-left-color:#dc3545;background:#fff6f6}
+    .your-ans{font-weight:bold;margin:8px 0}
+    .exp{background:#e3f2fd;padding:10px;border-radius:6px;margin-top:8px}
+    .options-list{margin-top:8px}
+    .options-list li{padding:6px 8px;border-radius:6px;margin-bottom:6px;list-style:none;background:#fff}
+    .options-list li.correct{background:#e6ffed;border:1px solid #c3f0c8}
+    .options-list li.selected{box-shadow:inset 0 0 0 2px rgba(102,126,234,.12)}
+    .no-data{text-align:center;padding:30px;color:#666}
+    .btn{padding:10px 20px;border:none;border-radius:6px;cursor:pointer;margin:5px;transition:all .3s}
+    .btn-primary{background:#667eea;color:#fff}
+    .btn-secondary{background:#6c757d;color:#fff}
+    .btn-success{background:#28a745;color:#fff}
+    .result-actions{text-align:center;margin-top:20px}
+    .meta{margin-bottom:12px;color:#444}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header><h1>📖 解析回看</h1></header>
+    <section class="section">
+      <div class="meta">
+        共 <span id="rev-total">0</span> 题，答对 <span id="rev-correct">0</span> 题，正确率 <span id="rev-rate">0</span>%
+      </div>
+      <div id="review-box"></div>
+      <div class="result-actions">
+        <button id="btn-back" class="btn btn-primary" onclick="location.href='index.html'">返回答题</button>
+        <button id="btn-wrong" class="btn btn-secondary" onclick="toggleWrong()">只看错题</button>
+        <button id="btn-export" class="btn btn-success" onclick="exportReview()">导出 txt</button>
+      </div>
+    </section>
+  </div>
+
+<script>
+const questions = JSON.parse(sessionStorage.getItem('reviewQuestions') || '[]');
+const answers   = JSON.parse(sessionStorage.getItem('reviewAnswers')   || '{}');
+let showWrong = false;
+
+function normalizeKey(k){
+  if(!k && k !== 0) return '';
+  k = String(k).trim();
+  const m = k.match(/([A-Z])/i);
+  if(m) return m[1].toUpperCase();
+  // fallback: first non-space char
+  return k.charAt(0).toUpperCase();
+}
+
+/** 将 q.options 规范为 [{key,text}, ...]，兼容字符串形式或对象形式 */
+function normalizeOptions(q){
+  if(!q || !q.options) return [];
+  return q.options.map(o=>{
+    if(typeof o === 'string'){
+      const m = o.match(/^([A-D])[\.\、\s]?(.*)$/i);
+      if(m) return { key: m[1].toUpperCase(), text: m[2].trim() || '' };
+      // 如果没有 A. 前缀，尝试取首字母作为 key（备用）
+      const fallbackKey = (o.trim().charAt(0) || '').toUpperCase();
+      return { key: /[A-Z]/i.test(fallbackKey) ? fallbackKey : '', text: o.trim() };
+    } else if(typeof o === 'object'){
+      const key = (o.key || o.k || '').toString().trim().toUpperCase();
+      const text = (o.text || o.label || o.value || '').toString().trim();
+      return { key: key, text: text || '' };
+    } else {
+      return { key: '', text: String(o) };
+    }
+  });
+}
+
+/** 在选项数组中找文本：key可能是'A'，也可能是完整答案文本 */
+function findOptionText(q, key){
+  const opts = normalizeOptions(q);
+  if(!key) return '';
+  const k = normalizeKey(key);
+  const found = opts.find(o => o.key === k);
+  if(found) return `${found.key}. ${found.text}`;
+  // 退而求其次：若 q.options 原为纯文本且没有前缀，尝试匹配包含 key 的那一项
+  const found2 = opts.find(o => o.text && o.text.indexOf(String(key).replace(/^[A-Z]\W*/i,'').trim()) !== -1);
+  if(found2) return `${found2.key ? found2.key + '. ' : ''}${found2.text}`;
+  return key; // 最后返回原始 key
+}
+
+function renderReview(){
+  const box = document.getElementById('review-box');
+  box.innerHTML = '';
+
+  if(!questions || questions.length === 0){
+    document.getElementById('rev-total').textContent = 0;
+    document.getElementById('rev-correct').textContent = 0;
+    document.getElementById('rev-rate').textContent = 0;
+    box.innerHTML = '<div class="no-data">未找到回放数据，请先在答题页提交并跳转到“查看解析”。</div>';
+    disableButtons(true);
+    return;
+  }
+
+  disableButtons(false);
+
+  // 统计总正确（全部题目）
+  let totalCorrect = 0;
+  questions.forEach(q => {
+    const userKey = normalizeKey(answers[q.id]);
+    const answerKey = normalizeKey(q.answer);
+    if(userKey && answerKey && userKey === answerKey) totalCorrect++;
+  });
+
+  // 渲染（可根据 showWrong 过滤）
+  questions.forEach(q => {
+    const userRaw = answers[q.id] || '';
+    const userKey = normalizeKey(userRaw);
+    const answerKey = normalizeKey(q.answer);
+    const ok = userKey && answerKey && userKey === answerKey;
+
+    if(showWrong && ok) return; // 只看错题时，跳过对的
+
+    const opts = normalizeOptions(q);
+    const optListHtml = opts.map(o=>{
+      const classes = [];
+      if(o.key && o.key === answerKey) classes.push('correct');
+      if(o.key && o.key === userKey) classes.push('selected');
+      return `<li class="${classes.join(' ')}">${o.key ? o.key + '. ' : ''}${escapeHtml(o.text)}</li>`;
+    }).join('');
+
+    // 如果没有标准化选项，尝试把 q.options（原始）显示为简单行
+    const fallbackOptionsHtml = (!opts.length && Array.isArray(q.options)) ? q.options.map(s=>`<li>${escapeHtml(String(s))}</li>`).join('') : '';
+
+    const userShow = userRaw ? findOptionText(q, userRaw) : '未作答';
+    const correctShow = findOptionText(q, q.answer) || (q.answer || '');
+
+    const card = document.createElement('div');
+    card.className = 'review-card ' + (ok ? '' : 'wrong');
+    card.innerHTML = `
+      <h4>${q.number}. ${escapeHtml(q.content)}</h4>
+      <ul class="options-list">${optListHtml || fallbackOptionsHtml}</ul>
+      <div class="your-ans">你的答案：<span style="font-weight:600">${escapeHtml(userShow)}</span> ${ok ? '<span style="color:#28a745;margin-left:8px">✓ 正确</span>' : ''}</div>
+      ${ok ? '' : `<div class="your-ans" style="color:#dc3545">正确答案：<strong>${escapeHtml(correctShow)}</strong></div>`}
+      <div class="exp">解析：${escapeHtml(q.explanation || '无')}</div>
+    `;
+    box.appendChild(card);
+  });
+
+  document.getElementById('rev-total').textContent  = questions.length;
+  document.getElementById('rev-correct').textContent= totalCorrect;
+  document.getElementById('rev-rate').textContent   = questions.length ? Math.round(totalCorrect/questions.length*100) : 0;
+
+  updateWrongBtnText();
+}
+
+/** 切换“只看错题” */
+function toggleWrong(){
+  showWrong = !showWrong;
+  renderReview();
+}
+
+function updateWrongBtnText(){
+  const btn = document.getElementById('btn-wrong');
+  btn.textContent = showWrong ? '显示全部' : '只看错题';
+}
+
+/** 导出当前显示的（若 showWrong 则只导出错题，否则导出全部） */
+function exportReview(){
+  if(!questions || questions.length === 0) return alert('没有数据可以导出');
+
+  const toExport = questions.filter(q=>{
+    const userKey = normalizeKey(answers[q.id]);
+    const answerKey = normalizeKey(q.answer);
+    const ok = userKey && answerKey && userKey === answerKey;
+    return showWrong ? !ok : true;
+  });
+
+  const lines = toExport.map(q=>{
+    const opts = normalizeOptions(q);
+    const optsText = opts.length ? opts.map(o=>`${o.key ? o.key + '. ' : ''}${o.text}`).join('\n') :
+      (Array.isArray(q.options) ? q.options.join('\n') : '');
+    const userRaw = answers[q.id] || '未作答';
+    const userShow = userRaw ? findOptionText(q, userRaw) : '未作答';
+    const correctShow = findOptionText(q, q.answer) || (q.answer||'');
+    return `#题目${q.number}\n##题目内容\n${q.content}\n##选项\n${optsText}\n##你的答案\n${userShow}\n##正确答案\n${correctShow}\n##解析\n${q.explanation || ''}`;
+  });
+
+  const blob = new Blob([lines.join('\n\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'review.txt'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** 禁用/启用按钮 */
+function disableButtons(dis){
+  document.getElementById('btn-wrong').disabled = dis;
+  document.getElementById('btn-export').disabled = dis;
+  document.getElementById('btn-back').disabled = false; // 一直允许返回
+}
+
+/** 简单的 HTML 转义（避免注入） */
+function escapeHtml(s){
+  if(s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+// 初始渲染
+renderReview();
+</script>
+</body>
+</html>

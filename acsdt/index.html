@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能答题系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+      <header><h1>📚 智能答题系统</h1><p>上传文档 → 立即答题</p></header>
+  
+      <!-- 上传 -->
+      <section id="upload-section" class="section">
+        <div class="upload-area">
+          <div class="upload-icon">📄</div>
+          <h3>拖拽 .txt 或点击上传</h3>
+          <input type="file" id="file-input" accept=".txt" hidden>
+          <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">选择文件</button>
+        </div>
+      </section>
+  <!-- 模式选择（顺序 / 随机） -->
+<label for="mode-select">出题模式：</label>
+<select id="mode-select">
+  <option value="sequential">顺序刷题</option>
+  <option value="random">随机刷题</option>
+  <!-- 辅助按钮（可放在结果区或工具区） -->
+<button class="btn" onclick="saveProgress()">保存进度</button>
+<button class="btn" onclick="loadProgress()">加载进度</button>
+<button class="btn" onclick="clearSavedQuiz()">清除缓存并重置</button>
+<button class="btn" onclick="exportWrongQuestions()">导出错题本</button>
+<button class="btn" onclick="exportResult()">导出成绩</button>
+</select>
+      <!-- 答题 -->
+      <section id="quiz-section" class="section hidden">
+        <div class="quiz-header">
+          <h2>答题区</h2>
+          <div class="quiz-info">
+            <span>共 <strong id="total-questions">0</strong> 题</span>
+            <span>已答 <strong id="answered-count">0</strong> 题</span>
+          </div>
+        </div>
+        <div id="questions-container"></div>
+        <div class="quiz-actions">
+          <button class="btn btn-secondary" onclick="prevQuestion()">上一题</button>
+          <button class="btn btn-secondary" onclick="nextQuestion()">下一题</button>
+          <button class="btn btn-success" onclick="submitQuiz()">提交答案</button>
+        </div>
+      </section>
+  
+      <!-- 结果 -->
+      <section id="result-section" class="section hidden">
+        <div class="result-header">
+          <h2>答题结果</h2>
+          <div class="score-display">
+            <div class="score-circle"><span id="score-percentage">0</span>%</div>
+            <p>答对 <span id="correct-count">0</span> / <span id="total-result">0</span> 题</p>
+          </div>
+        </div>
+        <div id="result-details"></div>
+        <div class="result-actions">
+          <button class="btn btn-primary" onclick="restartQuiz()">重新开始</button>
+          <button class="btn btn-secondary" onclick="location.href='review.html'">查看解析</button>
+          <button class="btn btn-warning" onclick="exportWrongQuestions()">导出错题本</button>
+<button class="btn btn-success" onclick="exportResult()">导出成绩</button>
+<button class="btn btn-secondary" onclick="saveProgress()">保存进度</button>
+<button class="btn btn-primary" onclick="loadProgress()">加载进度</button>
+        </div>
+      </section>
+  
+      <!-- 阶段浮窗 -->
+      <div id="phase-modal" class="modal hidden">
+        <div class="modal-content">
+          <h3>阶段结果（第 <span id="phase-no">1</span> 阶段）</h3>
+          <div class="phase-stats">本阶段 <span id="phase-correct">0</span> / 10 题，正确率 <span id="phase-rate">0</span>%</div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" id="continue-btn">继续答题</button>
+            <button class="btn btn-success" id="submit-phase-btn">提交阶段</button>
+            <button class="btn btn-secondary" id="view-resume-btn">稍后继续</button>
+          </div>
+        </div>
+      </div>
+  
+      <!-- 加载 -->
+      <div id="loading" class="loading hidden"><div class="spinner"></div><p>正在解析...</p></div>
+    </div>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <script src="script.js"></script>
+    <script src="word2txt.js"></script>
+</body>
+</html>
